@@ -75,32 +75,41 @@ class FeatureMapBlock(nn.Module):
         return x
 
 
-class UNet(nn.Module):
-    def __init__(self,input_channels,output_channels,hidden_channels=32):
-        super(UNet,self).__init__()
+class UNet_I(nn.Module):
+    def __init__(self,input_channels,output_channels,hidden_channels=16):
+        super(UNet_I,self).__init__()
         self.upfeature = FeatureMapBlock(input_channels,hidden_channels)
         self.contract1 = ContractingBlock(hidden_channels,use_in=False)
         self.contract2 = ContractingBlock(hidden_channels*2)
         self.contract3 = ContractingBlock(hidden_channels*4)
         self.contract4 = ContractingBlock(hidden_channels*8)
-        self.contract5 = ContractingBlock(hidden_channels*16)
-        self.expand0 = ExpandingBlock(hidden_channels*32)
+        # self.contract5 = ContractingBlock(hidden_channels*16)
+        # self.expand0 = ExpandingBlock(hidden_channels*32)
         self.expand1 = ExpandingBlock(hidden_channels*16)
         self.expand2 = ExpandingBlock(hidden_channels*8)
         self.expand3 = ExpandingBlock(hidden_channels*4)
         self.expand4 = ExpandingBlock(hidden_channels*2)
         self.downfeature = FeatureMapBlock(hidden_channels,output_channels)
         self.tanh = torch.nn.Tanh()
-    
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d):
+                torch.nn.init.normal_(m.weight,0.0,0.02)
+            # if isinstance(m,nn.InstanceNorm2d):
+            #     torch.nn.init.normal_(m.weight,0.0,0.02)
+            #     torch.nn.init.constant_(m.bias,0)
+
     def forward(self,x):
         x0 = self.upfeature(x)
         x1 = self.contract1(x0)
         x2 = self.contract2(x1)
         x3 = self.contract3(x2)
         x4 = self.contract4(x3)    #x4:512
-        x5 = self.contract5(x4)    #x5:1024
-        x6 = self.expand0(x5,x4)
-        x7 = self.expand1(x6,x3)
+        # x5 = self.contract5(x4)    #x5:1024
+        # x6 = self.expand0(x5,x4)
+        x7 = self.expand1(x4,x3)
         x8 = self.expand2(x7,x2)
         x9 = self.expand3(x8,x1)
         x10 = self.expand4(x9,x0)
@@ -117,7 +126,16 @@ class Discriminator(nn.Module):
         self.contract3 = ContractingBlock(hidden_channels*4)
         self.contract4 = ContractingBlock(hidden_channels*8)
         self.final = nn.Conv2d(hidden_channels*16,1,kernel_size=1)   #should change?
+        self._initialize_weights()
         
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m,nn.Conv2d) or isinstance(m,nn.ConvTranspose2d):
+                torch.nn.init.normal_(m.weight,0.0,0.02)
+            # if isinstance(m,nn.InstanceNorm2d):
+            #     torch.nn.init.normal_(m.weight,0.0,0.02)
+            #     torch.nn.init.constant_(m.bias,0)
+
     def forward(self,x): 
         x0 = self.upfeature(x)
         x1 = self.contract1(x0)

@@ -118,9 +118,9 @@ class AtrousConv(nn.Module):
         return x
     
 
-class UNet(nn.Module):
+class UNet_II(nn.Module):
     def __init__(self,input_channels,output_channels,hidden_channels=32):
-        super(UNet,self).__init__()
+        super(UNet_II,self).__init__()
         self.upfeature = FeatureMapBlock(input_channels,hidden_channels)
         self.contract1 = ContractingBlock(hidden_channels,use_in=False,use_dropout=True)
         self.contract2 = ContractingBlock(hidden_channels*2,use_dropout=True)

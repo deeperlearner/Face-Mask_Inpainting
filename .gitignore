@@ -1,0 +1,5 @@
+__pycache__/
+.ipynb_checkpoints/
+*.jpg
+wandb/
+Session.vim
