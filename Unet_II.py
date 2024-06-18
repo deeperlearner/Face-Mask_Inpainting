@@ -3,6 +3,8 @@ import torch
 from torch import nn
 from torchvision import transforms
 from torchvision.utils import make_grid
+from torchvision.models import vgg19
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def crop(image,new_shape):
@@ -119,18 +121,18 @@ class AtrousConv(nn.Module):
     
 
 class UNet_II(nn.Module):
-    def __init__(self,input_channels,output_channels,hidden_channels=32):
+    def __init__(self,input_channels,output_channels,hidden_channels=16):
         super(UNet_II,self).__init__()
         self.upfeature = FeatureMapBlock(input_channels,hidden_channels)
         self.contract1 = ContractingBlock(hidden_channels,use_in=False,use_dropout=True)
         self.contract2 = ContractingBlock(hidden_channels*2,use_dropout=True)
         self.contract3 = ContractingBlock(hidden_channels*4,use_dropout=True)
         self.contract4 = ContractingBlock(hidden_channels*8)
-        self.contract5 = ContractingBlock(hidden_channels*16)
+        # self.contract5 = ContractingBlock(hidden_channels*16)
         
-        self.atrous_conv = AtrousConv(hidden_channels*32)
+        self.atrous_conv = AtrousConv(hidden_channels*16)
         
-        self.expand0 = ExpandingBlock(hidden_channels*32)
+        # self.expand0 = ExpandingBlock(hidden_channels*32)
         self.expand1 = ExpandingBlock(hidden_channels*16)
         self.expand2 = ExpandingBlock(hidden_channels*8)
         self.expand3 = ExpandingBlock(hidden_channels*4)
@@ -142,8 +144,16 @@ class UNet_II(nn.Module):
         self.se3 = SE_Block(hidden_channels*8)
         
         self.tanh = torch.nn.Tanh()
-        
-        
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                torch.nn.init.normal_(m.weight, 0.0, 0.02)
+            if isinstance(m, nn.BatchNorm2d):
+                torch.nn.init.normal_(m.weight, 0.0, 0.02)
+                torch.nn.init.constant_(m.bias, 0)
+
     def forward(self,x):
         x0 = self.upfeature(x)
         x1 = self.contract1(x0)
@@ -153,10 +163,10 @@ class UNet_II(nn.Module):
         x3 = self.contract3(x2)
         x3 = self.se3(x3)
         x4 = self.contract4(x3)
-        x5 = self.contract5(x4)
-        x5 = self.atrous_conv(x5)
-        x6 = self.expand0(x5,x4)
-        x7 = self.expand1(x6,x3)
+        # x5 = self.contract5(x4)
+        x5 = self.atrous_conv(x4)
+        # x6 = self.expand0(x5,x4)
+        x7 = self.expand1(x5,x3)
         x8 = self.expand2(x7,x2)
         x9 = self.expand3(x8,x1)
         x10 = self.expand4(x9,x0)
@@ -166,7 +176,7 @@ class UNet_II(nn.Module):
 
 
 class Discriminator_whole(nn.Module):
-    def __init__(self,input_channels,hidden_channels=8):
+    def __init__(self,input_channels,hidden_channels=4):
         super(Discriminator_whole,self).__init__()
         self.upfeature = FeatureMapBlock(input_channels,hidden_channels)
         self.contract1 = ContractingBlock(hidden_channels,use_in=False)
@@ -174,6 +184,12 @@ class Discriminator_whole(nn.Module):
         self.contract3 = ContractingBlock(hidden_channels*4)
         self.contract4 = ContractingBlock(hidden_channels*8)
         self.final = nn.Conv2d(hidden_channels*16,1,kernel_size=1)  
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                torch.nn.init.normal_(m.weight, 0.0, 0.02)
         
     def forward(self,x,y):
         x = torch.cat([x,y],axis=1)
@@ -186,7 +202,7 @@ class Discriminator_whole(nn.Module):
         return xn
 
 class Discriminator_mask(nn.Module):
-    def __init__(self,input_channels,hidden_channels=8):
+    def __init__(self,input_channels,hidden_channels=4):
         super(Discriminator_mask,self).__init__()
         self.upfeature = FeatureMapBlock(input_channels,hidden_channels)
         self.contract1 = ContractingBlock(hidden_channels,use_in=False)
@@ -195,6 +211,12 @@ class Discriminator_mask(nn.Module):
         self.contract4 = ContractingBlock(hidden_channels*8)
         self.final = nn.Conv2d(hidden_channels*16,1,kernel_size=1) 
         self.dropout = nn.Dropout()
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                torch.nn.init.normal_(m.weight, 0.0, 0.02)
         
     def forward(self,x,y): 
         x = torch.cat([x,y],axis=1)
@@ -207,6 +229,42 @@ class Discriminator_mask(nn.Module):
         xn = self.final(x4)
         return xn
 
+
+class PerceptualNet(nn.Module):
+    def __init__(self, name = "vgg19", resize=True):
+        super(PerceptualNet, self).__init__()
+        blocks = []
+        blocks.append(vgg19(pretrained=True).features[:4].eval())
+        blocks.append(vgg19(pretrained=True).features[4:9].eval())
+        blocks.append(vgg19(pretrained=True).features[9:16].eval())
+        blocks.append(vgg19(pretrained=True).features[16:23].eval())
+        
+        for bl in blocks:
+            for p in bl:
+                p.requires_grad = False
+        self.blocks = torch.nn.ModuleList(blocks).to(device)
+        self.transform = torch.nn.functional.interpolate
+        self.mean = torch.nn.Parameter(torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1)).to(device)
+        self.std = torch.nn.Parameter(torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1)).to(device)
+        self.resize = resize
+    
+    def forward(self, inputs, targets):
+        if inputs.shape[1] != 3:
+            inputs = inputs.repeat(1, 3, 1, 1)
+            targets = targets.repeat(1, 3, 1, 1)
+        inputs = (inputs+1)/2
+        targets = (targets+1)/2
+        if self.resize:
+            inputs = self.transform(inputs, mode='bilinear', size=(224, 224), align_corners=False)
+            targets = self.transform(targets, mode='bilinear', size=(224, 224), align_corners=False)
+        loss = 0.0
+        x = inputs
+        y = targets
+        for block in self.blocks:
+            x = block(x)
+            y = block(y)
+            loss += torch.nn.functional.l1_loss(x, y)
+        return loss
 
 
 def inpaint_unet(masked,binary):

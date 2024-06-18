@@ -16,7 +16,6 @@ import wandb
 
 from dataset_mask import MXFaceDataset
 from Unet_I import UNet_I, Discriminator
-from utils.dice_score import dice_loss
 
 # assert torch.__version__ >= "1.9.0", "In order to enjoy the features of the new torch, \
 # we have upgraded the torch to 1.9.0. torch before than 1.9.0 may not work in the future."
@@ -93,15 +92,15 @@ def train_stage_I(save_model=False):
                 
                 # disc_opt.zero_grad()      ##update discriminator
                 # with torch.no_grad():
-                #     fake = gen(masked)
+                #     fake = gen_I(masked)
                 # disc_loss = get_disc_loss(disc, fake, binary, adv_criterion)
                 # disc_loss.backward(retain_graph=True)
                 # disc_opt.step()
                 
-                gen_opt.zero_grad()
-                gen_loss = get_gen_loss(gen, disc, binary, masked, adv_criterion, recon_criterion, lambda_recon)
+                gen_opt_I.zero_grad()
+                gen_loss = get_gen_loss(gen_I, disc, binary, masked, adv_criterion, recon_criterion, lambda_recon)
                 gen_loss.backward()
-                gen_opt.step()
+                gen_opt_I.step()
 
                 pbar.update(masked.shape[0])
                 global_step += 1
@@ -117,7 +116,7 @@ def train_stage_I(save_model=False):
                 division_step = 2000
                 if global_step % division_step == 0:
                     with torch.no_grad():
-                        fake = gen(masked)
+                        fake = gen_I(masked)
                     fake_pred = (fake + 1) / 2
                     experiment.log({
                         'images': [
@@ -135,11 +134,11 @@ def train_stage_I(save_model=False):
                         'epoch': epoch,
                     })
                     if save_model:
-                        torch.save({'gen':gen.state_dict(),
-                                    'gen_opt':gen_opt.state_dict(),
+                        torch.save({'gen_I':gen_I.state_dict(),
+                                    'gen_opt_I':gen_opt_I.state_dict(),
                                     # 'disc':disc.state_dict(),
                                     # 'disc_opt':disc_opt.state_dict(),
-                                    }, f"bi_unet_{cur_step}.pth")
+                                    }, f"models/UNet_I_{global_step}.pth")
                 if global_step % stop_step == 0:
                     break
 
@@ -165,6 +164,7 @@ if __name__ == "__main__":
     local_rank = 0
     dataset = MXFaceDataset(root_dir, local_rank)
 
+    # stage I
     adv_criterion = nn.BCEWithLogitsLoss()
     recon_criterion = nn.BCEWithLogitsLoss()#nn.L1Loss()
     lambda_recon = 200
@@ -173,15 +173,14 @@ if __name__ == "__main__":
     input_dim = 3
     binary_dim = 1
     learning_rate = 0.0002
-    target_shape = 112
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    gen = UNet_I(input_dim, binary_dim).to(device)
-    gen_opt = torch.optim.Adam(gen.parameters(), lr=learning_rate)
+    gen_I = UNet_I(input_dim, binary_dim).to(device)
+    gen_opt_I = torch.optim.Adam(gen_I.parameters(), lr=learning_rate)
     disc = Discriminator(binary_dim).to(device)
     disc_opt = torch.optim.Adam(disc.parameters(), lr=learning_rate)
 
-    # print(count_parameters(gen))
+    # print(count_parameters(gen_I))
     # os._exit(0)
 
-    train_stage_I()
+    train_stage_I(save_model=True)
