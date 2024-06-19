@@ -259,9 +259,6 @@ def train_stage_II(save_model=False):
     )
 
     for epoch in range(1,n_epochs+1):
-        experiment.log({
-            'epoch': epoch
-        })
         for face, masked_face, binary_mask_gt in tqdm(dataloader):
             face = face.to(device)
             masked_face = masked_face.to(device)
@@ -314,14 +311,14 @@ def train_stage_II(save_model=False):
                 sigma_real = get_covariance(real_features_all)
                 FID = frechet_distance(mu_real,mu_fake,sigma_real,sigma_fake).item()
                 
-                fid_file = open('FID_epoch16','a')       ##change##
+                fid_file = open('FID_epoch16','w')       ##change##
                 fid_file.write(str(cur_step)+"\n")
                 fid_file.write(str(round(FID,4))+"\n"+"\n")
                 fid_file.close()
                 fake_features_list.clear()
                 real_features_list.clear()
 
-                loss_file = open('loss_epoch16','a')     ##change##
+                loss_file = open('loss_epoch16','w')     ##change##
                 loss_file.write(str(cur_step)+"\n")
                 loss_file.write(str(round(mean_generator_loss,4))+"    "+str(round(mean_disc_whole_loss,4))+"    "+str(round(mean_disc_mask_loss,4))+"    ")
                 loss_file.write(str(round(l1_loss.item(),4))+"    "+str(round(1-ssim_loss.item(),4))+"    "+str(round(perceptual_loss.item(),4)))
@@ -331,32 +328,33 @@ def train_stage_II(save_model=False):
                 mean_disc_whole_loss = 0
                 mean_disc_mask_loss = 0
                 
-            experiment.log({
+            log_dict = {
                 'step': cur_step,
                 'Generator loss': gen_loss.item(),
-            })
+            }
             if cur_step%5==0:
-                experiment.log({
+                log_dict.update({
                     'Discriminator (whole) loss': disc_whole_loss.item(),
                 })
-            if cur_step>=3516*6:
-                experiment.log({
-                    'Discriminator (mask) loss': disc_mask_loss.item(),
-                })
+                if cur_step>=3516*6:
+                    log_dict.update({
+                        'Discriminator (mask) loss': disc_mask_loss.item(),
+                    })
+            experiment.log(log_dict)
 
             cur_step += 1
-            display_step = 892
+            display_step = 1000
             if cur_step % display_step == 0:
                 fake_pred = (fake + 1) / 2
                 experiment.log({
                     'face': [
-                        wandb.Image(face[0].cpu()),
+                        wandb.Image(face.cpu()),
                     ],
                     'masked_face': [
-                        wandb.Image(masked_face[0].cpu()),
+                        wandb.Image(masked_face.cpu()),
                     ],
                     'fake(inpainted)': [
-                        wandb.Image(fake_pred[0].cpu()),
+                        wandb.Image(fake_pred.cpu()),
                     ],
                     'step': cur_step,
                     'epoch': epoch,

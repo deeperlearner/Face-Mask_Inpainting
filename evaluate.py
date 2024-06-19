@@ -41,6 +41,7 @@ def inpaint(masked_face):
         wear_mask = (count_ones / total_elements) >= 0.1  # mask coverage larger than 10%
         # print(I_mask.size())  # (256, 1, 112, 112)
         selected_I_mask = I_mask[wear_mask]
+        unselected_I_mask = I_mask[~wear_mask]
         selected_masked_face = masked_face[wear_mask]
         unselected_masked_face = masked_face[~wear_mask]
         # print(selected_I_mask.size())
@@ -56,6 +57,7 @@ def inpaint(masked_face):
 
         # concatenate with face without mask
         batch_img = torch.cat((inpainted_img, unselected_masked_face), 0)
+        batch_mask = torch.cat((selected_I_mask, unselected_I_mask), 0)
 
     # # Make a grid of the original and processed images
     # masked_face_grid = make_grid(masked_face, nrow=8, normalize=False, scale_each=True)
@@ -67,7 +69,7 @@ def inpaint(masked_face):
     # save_image(I_mask_grid, 'I_mask.png')
     # save_image(inpainted_grid, 'inpainted.png')
     # os._exit(0)
-    return batch_img
+    return batch_img, batch_mask
 
 
 def noise_removal(binary_mask):
