@@ -345,7 +345,7 @@ def train_stage_II(save_model=False):
             cur_step += 1
             display_step = 1000
             if cur_step % display_step == 0:
-                fake_pred = (fake + 1) / 2
+                # fake_pred = (fake + 1) / 2
                 experiment.log({
                     'face': [
                         wandb.Image(face.cpu()),
@@ -354,7 +354,7 @@ def train_stage_II(save_model=False):
                         wandb.Image(masked_face.cpu()),
                     ],
                     'fake(inpainted)': [
-                        wandb.Image(fake_pred.cpu()),
+                        wandb.Image(fake.cpu()),
                     ],
                     'step': cur_step,
                     'epoch': epoch,
